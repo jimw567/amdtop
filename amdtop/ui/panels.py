@@ -8,8 +8,19 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from .. import config
 from ..telemetry.sample import CpuSample, Frame, IgpuSample, MemSample, NpuSample
 from . import gauges
+
+
+def _bw_row(g: IgpuSample, width: int = 20) -> Text:
+    total = g.dram_total_mbps
+    if total is None:
+        return gauges.labeled_meter("bw", None, width)
+    peak = config.MEM_BW_PEAK_MBPS
+    pct = 100.0 * total / peak
+    suffix = f"{total / 1000:.0f}/{peak / 1000:.0f} GB/s"
+    return gauges.labeled_meter("bw", pct, width, suffix, label_w=4)
 
 
 def _fmt_uptime(s: float | None) -> str:
@@ -22,7 +33,10 @@ def _fmt_uptime(s: float | None) -> str:
     return (f"{d}d " if d else "") + f"{h:02d}:{m:02d}"
 
 
-def render_header(frame: Frame, interval: float) -> Panel:
+_FOCUS_LABELS = {"cpu": "CPU", "igpu": "iGPU", "npu": "NPU"}
+
+
+def render_header(frame: Frame, interval: float, focus: str = "cpu") -> Panel:
     now = _dt.datetime.now().strftime("%H:%M:%S")
     left = Text()
     left.append(" amdtop ", style="bold reverse")
@@ -32,7 +46,14 @@ def render_header(frame: Frame, interval: float) -> Panel:
     left.append(f"  up {_fmt_uptime(frame.uptime_s)}", style="dim")
     if frame.socket_power_w is not None:
         left.append(f"   socket {frame.socket_power_w:.1f} W", style="magenta")
-    right = Text(f"{interval:.1f}s   q quit  +/- rate   {now}", style="dim")
+
+    right = Text()
+    right.append("focus ")
+    for i, key in enumerate(("cpu", "igpu", "npu"), start=1):
+        style = "bold reverse cyan" if key == focus else "dim"
+        right.append(f" {i}:{_FOCUS_LABELS[key]} ", style=style)
+    right.append(f"   {interval:.1f}s  q quit  +/- rate  {now}", style="dim")
+
     grid = Table.grid(expand=True)
     grid.add_column(justify="left")
     grid.add_column(justify="right")
@@ -96,11 +117,11 @@ def _mem_row(label: str, used: int | None, total: int | None, width: int = 20) -
     return gauges.labeled_meter(label, pct, width, suffix, label_w=4)
 
 
-def render_mem(m: MemSample) -> Panel:
+def render_mem(m: MemSample, width: int = 28) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
-    body.add_row(_mem_row("ram", m.used, m.total, width=28))
-    body.add_row(_mem_row("swap", m.swap_used, m.swap_total, width=28))
+    body.add_row(_mem_row("ram", m.used, m.total, width=width))
+    body.add_row(_mem_row("swap", m.swap_used, m.swap_total, width=width))
 
     stats = Text()
     if m.available is not None:
@@ -136,6 +157,7 @@ def render_igpu(g: IgpuSample) -> Panel:
     body.add_row(Text())
     body.add_row(_mem_row("vram", g.vram_used, g.vram_total))
     body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total))
+    body.add_row(_bw_row(g))
 
     name = g.marketing or "iGPU"
     title = f"iGPU · {name}"
@@ -144,6 +166,58 @@ def render_igpu(g: IgpuSample) -> Panel:
     if g.gfx:
         title += f" · {g.gfx}"
     return Panel(body, title=title, title_align="left", border_style="magenta")
+
+
+def render_cpu_compact(cpu: CpuSample) -> Panel:
+    body = Table.grid(expand=True)
+    body.add_column()
+    body.add_row(gauges.labeled_meter("all", cpu.total_pct, 10))
+    stats = Text()
+    if cpu.avg_mhz is not None:
+        stats.append(f"{cpu.avg_mhz} MHz  ", style="cyan")
+    if cpu.temp_c is not None:
+        stats.append(f"{cpu.temp_c:.0f}°C  ", style="yellow")
+    if cpu.power_w is not None:
+        stats.append(f"{cpu.power_w:.1f} W", style="magenta")
+    body.add_row(stats)
+    return Panel(body, title="CPU", title_align="left", border_style="green")
+
+
+def render_igpu_compact(g: IgpuSample) -> Panel:
+    body = Table.grid(expand=True)
+    body.add_column()
+    body.add_row(gauges.labeled_meter("busy", g.busy_pct, 10))
+    stats = Text()
+    if g.sclk_mhz is not None:
+        stats.append(f"{g.sclk_mhz} MHz  ", style="cyan")
+    if g.temp_c is not None:
+        stats.append(f"{g.temp_c:.0f}°C  ", style="yellow")
+    if g.power_w is not None:
+        stats.append(f"{g.power_w:.1f} W", style="magenta")
+    body.add_row(stats)
+    body.add_row(_mem_row("vram", g.vram_used, g.vram_total, width=10))
+    body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total, width=10))
+    body.add_row(_bw_row(g, width=10))
+    name = g.marketing or "iGPU"
+    return Panel(body, title=f"iGPU · {name}", title_align="left", border_style="magenta")
+
+
+def render_npu_compact(n: NpuSample) -> Panel:
+    body = Table.grid(expand=True)
+    body.add_column()
+    if not n.present:
+        body.add_row(Text("not detected", style="dim"))
+        return Panel(body, title="NPU", title_align="left", border_style="cyan")
+    body.add_row(gauges.labeled_meter("busy", n.activity_max, 10))
+    stats = Text()
+    if n.clk_mhz is not None:
+        stats.append(f"{n.clk_mhz} MHz  ", style="cyan")
+    if n.power_w is not None:
+        stats.append(f"{n.power_w:.2f} W  ", style="magenta")
+    if n.power_state:
+        stats.append(n.power_state, style="green" if n.power_state == "D0" else "dim")
+    body.add_row(stats)
+    return Panel(body, title="NPU · XDNA", title_align="left", border_style="cyan")
 
 
 def render_npu(n: NpuSample) -> Panel:

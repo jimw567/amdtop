@@ -57,6 +57,14 @@ class IgpuSample:
     uclk_mhz: int | None
     temp_c: float | None
     power_w: float | None
+    dram_read_mbps: int | None = None
+    dram_write_mbps: int | None = None
+
+    @property
+    def dram_total_mbps(self) -> int | None:
+        if self.dram_read_mbps is None and self.dram_write_mbps is None:
+            return None
+        return (self.dram_read_mbps or 0) + (self.dram_write_mbps or 0)
 
 
 @dataclass

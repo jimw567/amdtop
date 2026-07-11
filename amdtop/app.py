@@ -61,12 +61,13 @@ def run(interval: float = config.DEFAULT_INTERVAL) -> None:
     collector = Collector()
     collector.collect()  # prime CPU deltas
     console = Console()
+    focus = config.DEFAULT_FOCUS
     with _raw_stdin(), Live(
         console=console, screen=True, auto_refresh=False, transient=True
     ) as live:
         while True:
             frame = collector.collect()
-            live.update(layout.render(frame, interval), refresh=True)
+            live.update(layout.render(frame, interval, focus), refresh=True)
             key = _wait_key(interval)
             if key in ("q", "Q", "\x03"):  # q or Ctrl-C
                 break
@@ -74,3 +75,9 @@ def run(interval: float = config.DEFAULT_INTERVAL) -> None:
                 interval = _adjust(interval, faster=True)
             elif key == "-":
                 interval = _adjust(interval, faster=False)
+            elif key in ("1", "2", "3"):
+                focus = config.FOCUS_ORDER[int(key) - 1]
+            elif key == "\t":
+                focus = config.FOCUS_ORDER[
+                    (config.FOCUS_ORDER.index(focus) + 1) % len(config.FOCUS_ORDER)
+                ]

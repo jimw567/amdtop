@@ -9,23 +9,35 @@ from ..telemetry.sample import Frame
 from . import panels
 
 
-def render(frame: Frame, interval: float) -> Layout:
+from .. import config
+
+_FULL = {
+    "cpu": lambda f: panels.render_cpu(f.cpu),
+    "igpu": lambda f: panels.render_igpu(f.igpu),
+    "npu": lambda f: panels.render_npu(f.npu),
+}
+_COMPACT = {
+    "cpu": lambda f: panels.render_cpu_compact(f.cpu),
+    "igpu": lambda f: panels.render_igpu_compact(f.igpu),
+    "npu": lambda f: panels.render_npu_compact(f.npu),
+}
+
+
+def render(frame: Frame, interval: float, focus: str = config.DEFAULT_FOCUS) -> Layout:
     root = Layout()
     root.split_column(
-        Layout(panels.render_header(frame, interval), name="header", size=3),
+        Layout(panels.render_header(frame, interval, focus), name="header", size=3),
         Layout(name="body"),
     )
     root["body"].split_row(
-        Layout(name="left", ratio=2),
+        Layout(_FULL[focus](frame), name="left", ratio=2),
         Layout(name="side", ratio=1),
     )
-    root["body"]["left"].split_column(
-        Layout(panels.render_cpu(frame.cpu), name="cpu"),
-        Layout(panels.render_mem(frame.mem), name="mem", size=5),
-    )
+    others = [k for k in config.FOCUS_ORDER if k != focus]
     root["body"]["side"].split_column(
-        Layout(panels.render_igpu(frame.igpu), name="igpu"),
-        Layout(panels.render_npu(frame.npu), name="npu"),
+        Layout(_COMPACT[others[0]](frame), name="side0", size=7),
+        Layout(_COMPACT[others[1]](frame), name="side1", size=7),
+        Layout(panels.render_mem(frame.mem, width=10), name="mem"),
     )
     return root
 

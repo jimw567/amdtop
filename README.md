@@ -64,7 +64,9 @@ amdtop --once           # print a single snapshot and exit
 amdtop --version
 ```
 
-In the live view: `q` quits, `+` / `-` speed up / slow down the refresh.
+In the live view: `q` quits, `+` / `-` speed up / slow down the refresh, and
+`1` / `2` / `3` (or `Tab` to cycle) promote CPU, iGPU, or NPU to the dominant
+pane while the other two collapse to compact summary rows.
 
 ## How it works
 

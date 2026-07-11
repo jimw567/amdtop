@@ -72,6 +72,9 @@ class GpuMetrics:
     ipu_activity: list[int]
     core_activity: list[int]
 
+    dram_reads: int | None
+    dram_writes: int | None
+
     socket_power: float | None
     ipu_power: float | None
     apu_power: float | None
@@ -125,8 +128,8 @@ def parse(blob: bytes) -> GpuMetrics:
     ipu_activity = [nxt() for _ in range(8)]
     core_activity = [nxt() for _ in range(16)]
 
-    nxt()  # dram_reads
-    nxt()  # dram_writes
+    dram_reads = _clean16(nxt())
+    dram_writes = _clean16(nxt())
     nxt()  # ipu_reads
     nxt()  # ipu_writes
     nxt()  # system_clock_counter
@@ -170,6 +173,8 @@ def parse(blob: bytes) -> GpuMetrics:
         vcn_activity=vcn_activity,
         ipu_activity=ipu_activity,
         core_activity=core_activity,
+        dram_reads=dram_reads,
+        dram_writes=dram_writes,
         socket_power=socket_power,
         ipu_power=ipu_power,
         apu_power=apu_power,

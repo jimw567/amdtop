@@ -18,11 +18,13 @@ class IgpuSource:
         busy: float | None = None
         sclk = sclk_max = fclk = uclk = None
         temp = power = None
+        dram_r = dram_w = None
         if gm is not None:
             busy = gm.gfx_activity
             sclk, sclk_max = gm.gfxclk, gm.gfx_maxfreq
             fclk, uclk = gm.fclk, gm.uclk
             temp, power = gm.temp_gfx, gm.gfx_power
+            dram_r, dram_w = gm.dram_reads, gm.dram_writes
 
         if busy is None:
             busy = sysfs.read_int(config.GPU_BUSY)
@@ -43,4 +45,6 @@ class IgpuSource:
             uclk_mhz=uclk,
             temp_c=temp,
             power_w=power,
+            dram_read_mbps=dram_r,
+            dram_write_mbps=dram_w,
         )
