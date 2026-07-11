@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amdtop"
+version = "0.1.0"
+description = "btop-style CPU/iGPU/NPU monitor for AMD Strix Halo APUs"
+requires-python = ">=3.10"
+dependencies = ["rich>=13.0"]
+
+[project.scripts]
+amdtop = "amdtop.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["amdtop*"]

@@ -1,0 +1,90 @@
+"""Dataclasses describing one collected frame of telemetry."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class CpuSample:
+    total_pct: float
+    per_cpu_pct: list[float]
+    per_core_mhz: list[int]
+    avg_mhz: int | None
+    temp_c: float | None
+    power_w: float | None
+    loadavg: tuple[float, float, float] | None
+    model: str
+    n_threads: int
+
+
+@dataclass
+class MemSample:
+    total: int | None
+    used: int | None
+    available: int | None
+    cached: int | None
+    swap_total: int | None
+    swap_used: int | None
+
+    @property
+    def used_pct(self) -> float | None:
+        if not self.total or self.used is None:
+            return None
+        return 100.0 * self.used / self.total
+
+    @property
+    def swap_pct(self) -> float | None:
+        if not self.swap_total or self.swap_used is None:
+            return None
+        return 100.0 * self.swap_used / self.swap_total
+
+
+@dataclass
+class IgpuSample:
+    marketing: str | None
+    codename: str | None
+    arch: str | None
+    gfx: str | None
+    busy_pct: float | None
+    vram_used: int | None
+    vram_total: int | None
+    gtt_used: int | None
+    gtt_total: int | None
+    sclk_mhz: int | None
+    sclk_max_mhz: int | None
+    fclk_mhz: int | None
+    uclk_mhz: int | None
+    temp_c: float | None
+    power_w: float | None
+
+
+@dataclass
+class NpuSample:
+    present: bool
+    activity: list[int]
+    power_w: float | None
+    clk_mhz: int | None
+    power_state: str | None
+    fw_version: str | None
+    name: str | None
+
+    @property
+    def activity_max(self) -> float | None:
+        return max(self.activity) if self.activity else None
+
+    @property
+    def activity_avg(self) -> float | None:
+        return sum(self.activity) / len(self.activity) if self.activity else None
+
+
+@dataclass
+class Frame:
+    host: str
+    uptime_s: float | None
+    cpu: CpuSample
+    mem: MemSample
+    igpu: IgpuSample
+    npu: NpuSample
+    socket_power_w: float | None = None
+    extra: dict = field(default_factory=dict)
