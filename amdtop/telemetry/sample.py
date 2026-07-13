@@ -46,7 +46,9 @@ class IgpuSample:
     codename: str | None
     arch: str | None
     gfx: str | None
+    cu_count: int | None
     busy_pct: float | None
+    mem_busy_pct: float | None
     vram_used: int | None
     vram_total: int | None
     gtt_used: int | None

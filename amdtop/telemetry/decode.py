@@ -6,6 +6,7 @@ APU integrated GPUs; unknown ids fall back to a generic label.
 
 from __future__ import annotations
 
+import glob
 import re
 from dataclasses import dataclass
 
@@ -47,6 +48,54 @@ _DEFAULT_PEAK_MEM_BW_MBPS = 128000.0
 def peak_mem_bw_mbps(gfx: str | None) -> float:
     """Theoretical peak unified-memory bandwidth for the given gfx target."""
     return _PEAK_MEM_BW_MBPS.get(gfx or "", _DEFAULT_PEAK_MEM_BW_MBPS)
+
+
+_KFD_NODES = "/sys/class/kfd/kfd/topology/nodes"
+
+
+def _gfx_target_version(gfx: str | None) -> int | None:
+    """Encode a gfx target (e.g. ``gfx1150``) as KFD's numeric version (110500)."""
+    if not gfx or not gfx.startswith("gfx"):
+        return None
+    digits = gfx[3:]
+    if len(digits) < 3 or not digits.isdigit():
+        return None
+    return int(digits[:-2]) * 10000 + int(digits[-2]) * 100 + int(digits[-1])
+
+
+def _read_props(path: str) -> dict[str, int]:
+    txt = sysfs.read_text(path)
+    props: dict[str, int] = {}
+    if txt:
+        for line in txt.splitlines():
+            parts = line.split()
+            if len(parts) == 2:
+                try:
+                    props[parts[0]] = int(parts[1])
+                except ValueError:
+                    pass
+    return props
+
+
+def cu_count(gfx: str | None = None) -> int | None:
+    """Compute-unit count of the iGPU, from KFD topology.
+
+    CU = simd_count / simd_per_cu. Prefers the node whose gfx_target_version
+    matches ``gfx``; otherwise falls back to the first GPU node.
+    """
+    want = _gfx_target_version(gfx)
+    fallback: int | None = None
+    for node in sorted(glob.glob(f"{_KFD_NODES}/*/properties")):
+        p = _read_props(node)
+        simd, per_cu = p.get("simd_count", 0), p.get("simd_per_cu", 0)
+        if simd <= 0 or per_cu <= 0:
+            continue
+        cu = simd // per_cu
+        if want is not None and p.get("gfx_target_version") == want:
+            return cu
+        if fallback is None:
+            fallback = cu
+    return fallback
 
 
 def _marketing_from_cpuinfo() -> str | None:

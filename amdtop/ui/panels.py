@@ -136,7 +136,9 @@ def render_mem(m: MemSample, width: int = 28) -> Panel:
 def render_igpu(g: IgpuSample) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
-    body.add_row(gauges.labeled_meter("busy", g.busy_pct, 24))
+    body.add_row(gauges.labeled_meter("gpu", g.busy_pct, 24))
+    if g.mem_busy_pct is not None:
+        body.add_row(gauges.labeled_meter("mem", g.mem_busy_pct, 24))
 
     clk = Text()
     if g.sclk_mhz is not None:
@@ -161,6 +163,8 @@ def render_igpu(g: IgpuSample) -> Panel:
 
     name = g.marketing or "iGPU"
     title = f"iGPU · {name}"
+    if g.cu_count:
+        title += f" · {g.cu_count} CU"
     if g.arch:
         title += f" · {g.arch}"
     if g.gfx:

@@ -49,6 +49,7 @@ def _discover_npu_device(default: str = "/sys/class/accel/accel0/device") -> str
 DRM_DEVICE = _discover_drm_device()
 GPU_METRICS = f"{DRM_DEVICE}/gpu_metrics"
 GPU_BUSY = f"{DRM_DEVICE}/gpu_busy_percent"
+MEM_BUSY = f"{DRM_DEVICE}/mem_busy_percent"  # absent on some kernels/ASICs
 VRAM_USED = f"{DRM_DEVICE}/mem_info_vram_used"
 VRAM_TOTAL = f"{DRM_DEVICE}/mem_info_vram_total"
 GTT_USED = f"{DRM_DEVICE}/mem_info_gtt_used"

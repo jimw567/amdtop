@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .. import config
 from . import sysfs
-from .decode import decode_igpu
+from .decode import cu_count, decode_igpu
 from .gpu_metrics import GpuMetrics
 from .sample import IgpuSample
 
@@ -13,6 +13,7 @@ class IgpuSource:
     def __init__(self) -> None:
         # GPU identity is fixed for the life of the process; decode it once.
         self._info = decode_igpu(config.DRM_DEVICE)
+        self._cu_count = cu_count(self._info.gfx)
 
     def read(self, gm: GpuMetrics | None) -> IgpuSample:
         busy: float | None = None
@@ -34,7 +35,9 @@ class IgpuSource:
             codename=self._info.codename,
             arch=self._info.arch,
             gfx=self._info.gfx,
+            cu_count=self._cu_count,
             busy_pct=busy,
+            mem_busy_pct=sysfs.read_int(config.MEM_BUSY),
             vram_used=sysfs.read_int(config.VRAM_USED),
             vram_total=sysfs.read_int(config.VRAM_TOTAL),
             gtt_used=sysfs.read_int(config.GTT_USED),
