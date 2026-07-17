@@ -9,18 +9,15 @@ from rich.table import Table
 from rich.text import Text
 
 from .. import config
-from ..telemetry.sample import CpuSample, Frame, IgpuSample, MemSample, NpuSample
+from ..telemetry.sample import (
+    CpuSample,
+    Frame,
+    GpuProcess,
+    IgpuSample,
+    MemSample,
+    NpuSample,
+)
 from . import gauges
-
-
-def _bw_row(g: IgpuSample, width: int = 20) -> Text:
-    total = g.dram_total_mbps
-    if total is None:
-        return gauges.labeled_meter("bw", None, width)
-    peak = config.MEM_BW_PEAK_MBPS
-    pct = 100.0 * total / peak
-    suffix = f"{total / 1000:.0f}/{peak / 1000:.0f} GB/s"
-    return gauges.labeled_meter("bw", pct, width, suffix, label_w=4)
 
 
 def _fmt_uptime(s: float | None) -> str:
@@ -58,7 +55,7 @@ def render_header(frame: Frame, interval: float, focus: str = "cpu") -> Panel:
     grid.add_column(justify="left")
     grid.add_column(justify="right")
     grid.add_row(left, right)
-    return Panel(grid, style="blue", padding=(0, 1))
+    return Panel(grid, box=config.PANEL_BOX, style="blue", padding=(0, 1))
 
 
 def _core_grid(cpu: CpuSample, columns: int = 4) -> Table:
@@ -106,7 +103,7 @@ def render_cpu(cpu: CpuSample) -> Panel:
     body.add_row(_core_grid(cpu))
 
     title = f"CPU · {cpu.model}"
-    return Panel(body, title=title, title_align="left", border_style="green")
+    return Panel(body, box=config.PANEL_BOX, title=title, title_align="left", border_style="green")
 
 
 def _mem_row(label: str, used: int | None, total: int | None, width: int = 20) -> Text:
@@ -130,10 +127,25 @@ def render_mem(m: MemSample, width: int = 28) -> Panel:
         stats.append(f"cached {gauges.fmt_bytes(m.cached)}", style="dim")
     body.add_row(stats)
 
-    return Panel(body, title="Memory", title_align="left", border_style="yellow")
+    return Panel(body, box=config.PANEL_BOX, title="Memory", title_align="left", border_style="yellow")
 
 
-def render_igpu(g: IgpuSample) -> Panel:
+def _proc_rows(procs: list[GpuProcess], body: Table, width: int = 44) -> None:
+    body.add_row(Text("─" * width, style="dim"))
+    for p in procs:
+        line = Text()
+        line.append(f"{p.pid:>7} ")
+        line.append(f"{(p.user or '?')[:8]:<8} ", style="cyan")
+        line.append(f"{p.comm[:12]:<12} ", style="white")
+        if p.gpu_pct is None:
+            line.append(f"{'—':>4}", style="dim")
+        else:
+            line.append(f"{p.gpu_pct:3.0f}%", style=gauges.ramp_color(p.gpu_pct))
+        line.append(f" {gauges.fmt_bytes(p.vram_bytes):>6}", style="magenta")
+        body.add_row(line)
+
+
+def render_igpu(g: IgpuSample, procs: list[GpuProcess] | None = None) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
     body.add_row(gauges.labeled_meter("gpu", g.busy_pct, 24))
@@ -159,7 +171,8 @@ def render_igpu(g: IgpuSample) -> Panel:
     body.add_row(Text())
     body.add_row(_mem_row("vram", g.vram_used, g.vram_total))
     body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total))
-    body.add_row(_bw_row(g))
+    if procs:
+        _proc_rows(procs, body)
 
     name = g.marketing or "iGPU"
     title = f"iGPU · {name}"
@@ -169,7 +182,11 @@ def render_igpu(g: IgpuSample) -> Panel:
         title += f" · {g.arch}"
     if g.gfx:
         title += f" · {g.gfx}"
-    return Panel(body, title=title, title_align="left", border_style="magenta")
+    peak_gbps = config.MEM_BW_PEAK_MBPS / 1000.0
+    tilde = "~" if config.MEM_BW_PEAK_IS_ESTIMATE else ""
+    mem = f"{config.MEM_TYPE} " if config.MEM_TYPE else ""
+    title += f" · {mem}{tilde}{peak_gbps:.0f} GB/s"
+    return Panel(body, box=config.PANEL_BOX, title=title, title_align="left", border_style="magenta")
 
 
 def render_cpu_compact(cpu: CpuSample) -> Panel:
@@ -184,7 +201,7 @@ def render_cpu_compact(cpu: CpuSample) -> Panel:
     if cpu.power_w is not None:
         stats.append(f"{cpu.power_w:.1f} W", style="magenta")
     body.add_row(stats)
-    return Panel(body, title="CPU", title_align="left", border_style="green")
+    return Panel(body, box=config.PANEL_BOX, title="CPU", title_align="left", border_style="green")
 
 
 def render_igpu_compact(g: IgpuSample) -> Panel:
@@ -201,9 +218,8 @@ def render_igpu_compact(g: IgpuSample) -> Panel:
     body.add_row(stats)
     body.add_row(_mem_row("vram", g.vram_used, g.vram_total, width=10))
     body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total, width=10))
-    body.add_row(_bw_row(g, width=10))
     name = g.marketing or "iGPU"
-    return Panel(body, title=f"iGPU · {name}", title_align="left", border_style="magenta")
+    return Panel(body, box=config.PANEL_BOX, title=f"iGPU · {name}", title_align="left", border_style="magenta")
 
 
 def render_npu_compact(n: NpuSample) -> Panel:
@@ -211,7 +227,7 @@ def render_npu_compact(n: NpuSample) -> Panel:
     body.add_column()
     if not n.present:
         body.add_row(Text("not detected", style="dim"))
-        return Panel(body, title="NPU", title_align="left", border_style="cyan")
+        return Panel(body, box=config.PANEL_BOX, title="NPU", title_align="left", border_style="cyan")
     body.add_row(gauges.labeled_meter("busy", n.activity_max, 10))
     stats = Text()
     if n.clk_mhz is not None:
@@ -221,7 +237,7 @@ def render_npu_compact(n: NpuSample) -> Panel:
     if n.power_state:
         stats.append(n.power_state, style="green" if n.power_state == "D0" else "dim")
     body.add_row(stats)
-    return Panel(body, title="NPU · XDNA", title_align="left", border_style="cyan")
+    return Panel(body, box=config.PANEL_BOX, title="NPU · XDNA", title_align="left", border_style="cyan")
 
 
 def render_npu(n: NpuSample) -> Panel:
@@ -230,7 +246,7 @@ def render_npu(n: NpuSample) -> Panel:
 
     if not n.present:
         body.add_row(Text("NPU not detected", style="dim"))
-        return Panel(body, title="NPU", title_align="left", border_style="cyan")
+        return Panel(body, box=config.PANEL_BOX, title="NPU", title_align="left", border_style="cyan")
 
     head = gauges.labeled_meter("busy", n.activity_max, 24)
     body.add_row(head)
@@ -253,4 +269,4 @@ def render_npu(n: NpuSample) -> Panel:
     ident = Text(f"{n.name or 'npu'}  fw {n.fw_version or '?'}", style="dim")
     body.add_row(ident)
 
-    return Panel(body, title="NPU · XDNA", title_align="left", border_style="cyan")
+    return Panel(body, box=config.PANEL_BOX, title="NPU · XDNA", title_align="left", border_style="cyan")

@@ -89,6 +89,16 @@ class NpuSample:
 
 
 @dataclass
+class GpuProcess:
+    pid: int
+    user: str | None
+    comm: str
+    gpu_pct: float | None  # None when the driver exposes no per-engine busy time
+    vram_bytes: int
+    gtt_bytes: int
+
+
+@dataclass
 class Frame:
     host: str
     uptime_s: float | None
@@ -97,4 +107,5 @@ class Frame:
     igpu: IgpuSample
     npu: NpuSample
     socket_power_w: float | None = None
+    gpu_procs: list[GpuProcess] = field(default_factory=list)
     extra: dict = field(default_factory=dict)

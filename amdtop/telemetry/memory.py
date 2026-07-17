@@ -31,6 +31,9 @@ def _cache_home() -> str:
 _MEM_BW_CACHE = os.path.join(
     _cache_home(), ".cache", "amdtop", f"mem_bw_mbps.{socket.gethostname()}"
 )
+_MEM_TYPE_CACHE = os.path.join(
+    _cache_home(), ".cache", "amdtop", f"mem_type.{socket.gethostname()}"
+)
 
 
 def _first_int(val: str | None) -> int | None:
@@ -40,6 +43,32 @@ def _first_int(val: str | None) -> int | None:
         return int(val.split()[0])
     except (ValueError, IndexError):
         return None
+
+
+def _parse_dmidecode_mem_type(text: str) -> str | None:
+    """Return the memory type (e.g. 'LPDDR5', 'DDR5') of the first populated module."""
+    cur: dict[str, str] = {}
+
+    def type_of(d: dict[str, str]) -> str | None:
+        if not _first_int(d.get("Size")):  # unpopulated slot
+            return None
+        t = (d.get("Type") or "").strip()
+        if not t or t.lower() in ("unknown", "other", "none"):
+            return None
+        return t
+
+    for line in text.splitlines():
+        s = line.strip()
+        if s == "Memory Device":
+            found = type_of(cur)
+            if found:
+                return found
+            cur = {}
+            continue
+        key, sep, val = s.partition(":")
+        if sep:
+            cur[key.strip()] = val.strip()
+    return type_of(cur)
 
 
 def _parse_dmidecode_mem_bw(text: str) -> float | None:
@@ -68,14 +97,13 @@ def _parse_dmidecode_mem_bw(text: str) -> float | None:
     return total or None
 
 
-def detect_mem_bw_mbps(allow_sudo: bool = False) -> float | None:
-    """Read peak memory bandwidth from SMBIOS via dmidecode.
+def _run_dmidecode_t17(allow_sudo: bool = False) -> str | None:
+    """Return the raw ``dmidecode -t 17`` (Memory Device) text, or None.
 
     Runs dmidecode directly when already root. Otherwise, if ``allow_sudo`` is
     set, escalates only dmidecode via ``sudo`` (may prompt for a password) so the
     calling user still owns any cache it writes -- important on root_squash NFS
-    homes where a root process cannot write the user's cache. Returns None when
-    the data can't be read.
+    homes where a root process cannot write the user's cache.
     """
     if os.geteuid() == 0:
         cmd = ["dmidecode", "-t", "17"]
@@ -91,7 +119,19 @@ def detect_mem_bw_mbps(allow_sudo: bool = False) -> float | None:
         return None
     if out.returncode != 0:
         return None
-    return _parse_dmidecode_mem_bw(out.stdout)
+    return out.stdout
+
+
+def detect_mem_bw_mbps(allow_sudo: bool = False) -> float | None:
+    """Read peak memory bandwidth from SMBIOS via dmidecode; None if unavailable."""
+    text = _run_dmidecode_t17(allow_sudo)
+    return _parse_dmidecode_mem_bw(text) if text is not None else None
+
+
+def detect_mem_type(allow_sudo: bool = False) -> str | None:
+    """Read the installed memory type from SMBIOS via dmidecode; None if unavailable."""
+    text = _run_dmidecode_t17(allow_sudo)
+    return _parse_dmidecode_mem_type(text) if text is not None else None
 
 
 def _read_cache() -> float | None:
@@ -132,6 +172,40 @@ def mem_bw_mbps(fallback: float) -> float:
     """Real DIMM-derived peak if known, else the given fallback."""
     real = cached_or_detected_mem_bw_mbps()
     return real if real is not None else fallback
+
+
+def _read_type_cache() -> str | None:
+    try:
+        with open(_MEM_TYPE_CACHE) as fh:
+            v = fh.read().strip()
+        return v or None
+    except OSError:
+        return None
+
+
+def _write_type_cache(v: str) -> bool:
+    try:
+        os.makedirs(os.path.dirname(_MEM_TYPE_CACHE), exist_ok=True)
+        with open(_MEM_TYPE_CACHE, "w") as fh:
+            fh.write(v)
+        return True
+    except OSError:
+        return False
+
+
+def cached_or_detected_mem_type() -> str | None:
+    """Real DIMM memory type from cache, or SMBIOS if already root; else None.
+
+    Never prompts for a password here (no sudo) -- that would hang the TUI on
+    startup. Priming via sudo is an explicit step (see the module ``__main__``).
+    """
+    cached = _read_type_cache()
+    if cached is not None:
+        return cached
+    detected = detect_mem_type()
+    if detected is not None and _write_type_cache(detected):
+        return detected
+    return None
 
 
 def _read_meminfo() -> dict[str, int]:
@@ -181,9 +255,25 @@ if __name__ == "__main__":
     # and writes the cache as you, so it works on root_squash NFS homes.
     import sys
 
-    bw = detect_mem_bw_mbps(allow_sudo=True)
-    if bw is None:
+    if os.geteuid() != 0:
+        print(
+            "amdtop needs to read your DIMMs' type and speed from SMBIOS to show "
+            "the real peak memory bandwidth.\n"
+            "This runs `sudo dmidecode -t 17`, so you may be prompted for your "
+            "sudo password next.\n"
+            "Don't need it? Skip this and run `amdtop --no-strict` to use an "
+            "estimated peak instead.\n",
+            file=sys.stderr,
+        )
+
+    text = _run_dmidecode_t17(allow_sudo=True)
+    if text is None:
         print("could not read SMBIOS memory info via dmidecode.", file=sys.stderr)
+        sys.exit(1)
+    bw = _parse_dmidecode_mem_bw(text)
+    mem_type = _parse_dmidecode_mem_type(text)
+    if bw is None:
+        print("could not parse memory bandwidth from dmidecode.", file=sys.stderr)
         sys.exit(1)
     if not _write_cache(bw):
         print(f"could not write cache to {_MEM_BW_CACHE}", file=sys.stderr)
@@ -192,3 +282,5 @@ if __name__ == "__main__":
         f"memory bandwidth peak: {bw / 1000:.1f} GB/s ({bw:.0f} MB/s)\n"
         f"cached at {_MEM_BW_CACHE}"
     )
+    if mem_type and _write_type_cache(mem_type):
+        print(f"memory type: {mem_type}\ncached at {_MEM_TYPE_CACHE}")

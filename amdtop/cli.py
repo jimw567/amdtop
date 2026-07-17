@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__, app, config
@@ -34,13 +35,24 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "error: memory bandwidth peak is unknown for this host "
             "(no cached SMBIOS value).\n"
-            "Prime it once (you'll be prompted for your sudo password), then "
-            "re-run amdtop:\n"
+            "Prime it once -- this reads your DIMMs' type and speed via "
+            "`sudo dmidecode -t 17`, so you may be prompted for your sudo "
+            "password:\n"
             "    python -m amdtop.telemetry.memory\n"
-            "Or run with --no-strict to use an estimated value.",
+            "Don't need the real peak? Run with --no-strict to use an "
+            "estimated value.",
             file=sys.stderr,
         )
         return 1
+
+    if os.geteuid() != 0:
+        print(
+            "note: only your own GPU processes are listed -- reading other "
+            "users' /proc fdinfo needs root.\n"
+            "Run `sudo amdtop` to see every user's GPU processes; otherwise "
+            "this is safe to ignore.",
+            file=sys.stderr,
+        )
 
     interval = max(config.MIN_INTERVAL, min(config.MAX_INTERVAL, args.interval))
     try:

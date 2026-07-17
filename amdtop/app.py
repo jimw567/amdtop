@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import select
 import sys
 import termios
@@ -57,10 +58,24 @@ def run_once(interval: float, prime: float = 0.3) -> None:
     Console().print(layout.render_static(frame, interval))
 
 
+def _live_console() -> Console:
+    """Console for the full-screen loop.
+
+    Inside tmux, the alternate screen's last row is unusable, so a layout sized
+    to the full terminal height overflows by one row and every panel border
+    lands one row too low. Pinning the height one row short fixes the alignment;
+    width stays auto-detected so horizontal resizes still reflow.
+    """
+    console = Console()
+    if os.environ.get("TMUX"):
+        console = Console(height=max(1, console.size.height - 1))
+    return console
+
+
 def run(interval: float = config.DEFAULT_INTERVAL) -> None:
     collector = Collector()
     collector.collect()  # prime CPU deltas
-    console = Console()
+    console = _live_console()
     focus = config.DEFAULT_FOCUS
     with _raw_stdin(), Live(
         console=console, screen=True, auto_refresh=False, transient=True

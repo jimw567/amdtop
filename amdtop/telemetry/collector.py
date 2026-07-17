@@ -6,6 +6,7 @@ import socket
 
 from . import gpu_metrics, sysfs
 from .cpu import CpuSource
+from .gpu_procs import GpuProcessesSource
 from .igpu import IgpuSource
 from .memory import MemSource
 from .npu import GpuMetricsNpuSource, NpuSource
@@ -18,6 +19,7 @@ class Collector:
         self._mem = MemSource()
         self._igpu = IgpuSource()
         self._npu = npu_source or GpuMetricsNpuSource()
+        self._gpu_procs = GpuProcessesSource()
         self._host = socket.gethostname()
 
     def collect(self) -> Frame:
@@ -26,6 +28,7 @@ class Collector:
         mem = self._mem.read()
         igpu = self._igpu.read(gm)
         npu = self._npu.read(gm)
+        gpu_procs = self._gpu_procs.read()
         socket_power = gm.socket_power if gm else None
         return Frame(
             host=self._host,
@@ -35,6 +38,7 @@ class Collector:
             igpu=igpu,
             npu=npu,
             socket_power_w=socket_power,
+            gpu_procs=gpu_procs,
         )
 
 

@@ -6,6 +6,8 @@ import glob
 import os
 import re
 
+from rich import box
+
 from .telemetry import decode, memory
 
 # Refresh interval bounds (seconds).
@@ -47,6 +49,8 @@ def _discover_npu_device(default: str = "/sys/class/accel/accel0/device") -> str
 # sysfs locations. Auto-detected: the iGPU DRM card index and NPU accel index
 # differ between machines (e.g. Strix Halo card1 vs Strix Point card0).
 DRM_DEVICE = _discover_drm_device()
+# PCI bus address (e.g. 0000:c5:00.0) used to match this card in DRM fdinfo.
+DRM_PDEV = os.path.basename(os.path.realpath(DRM_DEVICE))
 GPU_METRICS = f"{DRM_DEVICE}/gpu_metrics"
 GPU_BUSY = f"{DRM_DEVICE}/gpu_busy_percent"
 MEM_BUSY = f"{DRM_DEVICE}/mem_busy_percent"  # absent on some kernels/ASICs
@@ -72,6 +76,9 @@ MEM_BW_PEAK_MBPS = (
     else decode.peak_mem_bw_mbps(decode.decode_igpu(DRM_DEVICE).gfx)
 )
 
+# Installed memory type (e.g. "LPDDR5", "DDR5") from SMBIOS; None if unknown.
+MEM_TYPE = memory.cached_or_detected_mem_type()
+
 # Color ramp for utilization gauges (percent breakpoints).
 RAMP_GREEN_MAX = 60.0
 RAMP_YELLOW_MAX = 85.0
@@ -79,3 +86,13 @@ RAMP_YELLOW_MAX = 85.0
 # Which engine gets the dominant pane. Cycle order for Tab; keys 1/2/3 select.
 FOCUS_ORDER = ("cpu", "igpu", "npu")
 DEFAULT_FOCUS = "igpu"
+
+# Max GPU-using processes listed in the iGPU panel (sorted by GPU % desc).
+GPU_PROC_TOP_N = 5
+
+# Panel border glyphs. rich's default ROUNDED (╭╮╰╯) corners are absent from
+# some terminal fonts and get substituted by a stand-in like "_", which eats a
+# column and shifts every border. SQUARE (┌┐└┘) is universally available; set
+# AMDTOP_BOX=ascii for a pure-ASCII fallback, or =rounded to restore the curves.
+_BOX_STYLES = {"square": box.SQUARE, "ascii": box.ASCII, "rounded": box.ROUNDED}
+PANEL_BOX = _BOX_STYLES.get(os.environ.get("AMDTOP_BOX", "square").lower(), box.SQUARE)

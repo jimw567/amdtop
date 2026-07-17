@@ -13,7 +13,7 @@ from .. import config
 
 _FULL = {
     "cpu": lambda f: panels.render_cpu(f.cpu),
-    "igpu": lambda f: panels.render_igpu(f.igpu),
+    "igpu": lambda f: panels.render_igpu(f.igpu, f.gpu_procs),
     "npu": lambda f: panels.render_npu(f.npu),
 }
 _COMPACT = {
@@ -48,6 +48,6 @@ def render_static(frame: Frame, interval: float) -> Group:
         panels.render_header(frame, interval),
         panels.render_cpu(frame.cpu),
         panels.render_mem(frame.mem),
-        panels.render_igpu(frame.igpu),
+        panels.render_igpu(frame.igpu, frame.gpu_procs),
         panels.render_npu(frame.npu),
     )
