@@ -98,6 +98,11 @@ IGPU_HISTORY_WIDTH = 60
 # the iGPU panel; the focus layout assumes a terminal tall enough (>= ~28 rows,
 # true for a normal/tmux window) to show both without clipping.
 IGPU_HISTORY_HEIGHT = 4
+# Fixed vertical scale (lo, hi) for each trend plot, so bar heights are
+# comparable across the whole run regardless of the values currently in view.
+# sclk: idle floor .. boost ceiling (MHz); temp: comfortable .. throttle (°C).
+IGPU_SCLK_PLOT_RANGE = (600.0, 2900.0)
+IGPU_TEMP_PLOT_RANGE = (40.0, 95.0)
 
 # Panel border glyphs. rich's default ROUNDED (╭╮╰╯) corners are absent from
 # some terminal fonts and get substituted by a stand-in like "_", which eats a

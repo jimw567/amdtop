@@ -23,9 +23,33 @@ def test_old_samples_fall_out_of_window():
     h = MetricHistory(window_s=10.0)
     h.record(100, now=0.0)
     h.record(200, now=5.0)
-    h.record(300, now=100.0)  # evicts the two older samples
+    h.record(300, now=100.0)  # evicts the two older samples from the plot
     s = h.series(4, now=100.0)
-    assert s.cur == 300 and s.min == 300 and s.max == 300
+    assert s.cur == 300
+    # only the newest sample is still plotted...
+    assert [p for p in s.points if p is not None] == [300]
+
+
+def test_min_max_are_sticky_across_window():
+    h = MetricHistory(window_s=10.0)
+    h.record(100, now=0.0)  # slides out of the window later
+    h.record(2900, now=5.0)  # slides out too
+    h.record(300, now=100.0)  # only this remains in-window
+    s = h.series(4, now=100.0)
+    assert s.cur == 300
+    # min/max persist even though those samples left the window
+    assert s.min == 100 and s.max == 2900
+
+
+def test_min_max_survive_empty_window():
+    h = MetricHistory(window_s=10.0)
+    h.record(800, now=0.0)
+    h.record(2900, now=1.0)
+    h.record(None, now=1000.0)  # a later frame evicts every aged-out sample
+    s = h.series(4, now=1000.0)
+    assert s.points == [None] * 4
+    assert s.cur is None
+    assert s.min == 800 and s.max == 2900
 
 
 def test_none_values_not_recorded():

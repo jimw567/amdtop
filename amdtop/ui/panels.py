@@ -149,10 +149,16 @@ def _trend_rows(body: Table, g: IgpuSample) -> None:
     window_m = config.IGPU_HISTORY_WINDOW_S / 60.0
     win = f"{window_m:.0f}m" if window_m == int(window_m) else f"{window_m:.1f}m"
     specs = [
-        ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}"),
-        ("temp", g.temp_history, "°C", "yellow", "{:.0f}"),
+        ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}", config.IGPU_SCLK_PLOT_RANGE),
+        ("temp", g.temp_history, "°C", "yellow", "{:.0f}", config.IGPU_TEMP_PLOT_RANGE),
     ]
-    for label, series, unit, color, fmt in specs:
+    # Shared gutter width so both plots' bars start at the same column.
+    gutter_w = max(
+        len(fmt.format(v))
+        for *_, fmt, (lo, hi) in specs
+        for v in (lo, hi)
+    )
+    for label, series, unit, color, fmt, (lo, hi) in specs:
         if series is None:
             continue
         head = Text()
@@ -166,10 +172,22 @@ def _trend_rows(body: Table, g: IgpuSample) -> None:
             )
         head.append(f"  · {win}", style="dim")
         body.add_row(head)
-        for line in gauges.plot(
-            series.points, config.IGPU_HISTORY_HEIGHT, color=color
-        ):
-            row = Text("     ")
+        lines = gauges.plot(
+            series.points,
+            config.IGPU_HISTORY_HEIGHT,
+            lo=lo,
+            hi=hi,
+            color=color,
+        )
+        # y-axis gutter: hi label on the top row, lo on the bottom, blank between.
+        for i, line in enumerate(lines):
+            if i == 0:
+                tick = fmt.format(hi)
+            elif i == len(lines) - 1:
+                tick = fmt.format(lo)
+            else:
+                tick = ""
+            row = Text(f"{tick:>{gutter_w}} ", style="dim")
             row.append_text(line)
             body.add_row(row)
 
