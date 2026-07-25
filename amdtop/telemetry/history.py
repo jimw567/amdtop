@@ -11,8 +11,9 @@ from dataclasses import dataclass
 class Series:
     """A fixed-width downsampled view of one metric over the window.
 
-    ``points`` has ``len == width``; oldest bucket first, newest last. A bucket
-    with no samples yet (the window not filled) is ``None`` and renders as a gap.
+    ``points`` has ``len == width``; oldest bucket first, newest last. Each
+    bucket holds the *peak* value of the samples in its time slot; a bucket with
+    no samples yet (the window not filled) is ``None`` and renders as a gap.
     ``cur`` is the newest windowed sample; ``min``/``max`` are *sticky* extremes
     over every value seen since process start, so the plot's vertical scale is
     fixed and doesn't rescale as samples slide out of the window.
@@ -58,14 +59,13 @@ class MetricHistory:
 
         start = t - self._window_s
         span = self._window_s
-        sums = [0.0] * width
-        counts = [0] * width
+        points: list[float | None] = [None] * width
         for st, sv in self._samples:
             idx = int((st - start) / span * width)
             idx = max(0, min(width - 1, idx))
-            sums[idx] += sv
-            counts[idx] += 1
-        points = [sums[i] / counts[i] if counts[i] else None for i in range(width)]
+            # Peak within the time slot, so a brief boost isn't averaged away.
+            prev = points[idx]
+            points[idx] = sv if prev is None else max(prev, sv)
 
         cur = self._samples[-1][1]
         return Series(points, cur, self._min, self._max)

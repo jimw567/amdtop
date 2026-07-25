@@ -61,13 +61,13 @@ def test_none_values_not_recorded():
     assert s.cur == 500 and s.min == 500 and s.max == 500
 
 
-def test_buckets_average_samples_in_slot():
+def test_buckets_take_peak_in_slot():
     h = MetricHistory(window_s=4.0)
     # window [0,4] into 4 buckets of width 1s; two samples land in bucket 0.
     h.record(100, now=0.0)
     h.record(200, now=0.5)
     s = h.series(4, now=4.0)
-    assert s.points[0] == 150.0
+    assert s.points[0] == 200.0  # peak of the slot, not the 150 average
 
 
 def test_sparkline_flat_series_on_baseline():
