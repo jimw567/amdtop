@@ -6,6 +6,7 @@ from .. import config
 from . import sysfs
 from .decode import cu_count, decode_igpu
 from .gpu_metrics import GpuMetrics
+from .history import MetricHistory
 from .sample import IgpuSample
 
 
@@ -14,6 +15,8 @@ class IgpuSource:
         # GPU identity is fixed for the life of the process; decode it once.
         self._info = decode_igpu(config.DRM_DEVICE)
         self._cu_count = cu_count(self._info.gfx)
+        self._sclk_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
+        self._temp_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
 
     def read(self, gm: GpuMetrics | None) -> IgpuSample:
         busy: float | None = None
@@ -29,6 +32,10 @@ class IgpuSource:
 
         if busy is None:
             busy = sysfs.read_int(config.GPU_BUSY)
+
+        self._sclk_hist.record(sclk)
+        self._temp_hist.record(temp)
+        width = config.IGPU_HISTORY_WIDTH
 
         return IgpuSample(
             marketing=self._info.marketing,
@@ -50,4 +57,6 @@ class IgpuSource:
             power_w=power,
             dram_read_mbps=dram_r,
             dram_write_mbps=dram_w,
+            sclk_history=self._sclk_hist.series(width),
+            temp_history=self._temp_hist.series(width),
         )

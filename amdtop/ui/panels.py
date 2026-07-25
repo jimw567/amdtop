@@ -145,6 +145,35 @@ def _proc_rows(procs: list[GpuProcess], body: Table, width: int = 44) -> None:
         body.add_row(line)
 
 
+def _trend_rows(body: Table, g: IgpuSample) -> None:
+    window_m = config.IGPU_HISTORY_WINDOW_S / 60.0
+    win = f"{window_m:.0f}m" if window_m == int(window_m) else f"{window_m:.1f}m"
+    specs = [
+        ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}"),
+        ("temp", g.temp_history, "°C", "yellow", "{:.0f}"),
+    ]
+    for label, series, unit, color, fmt in specs:
+        if series is None:
+            continue
+        head = Text()
+        head.append(f"{label:<5}", style="bold")
+        cur = "n/a" if series.cur is None else fmt.format(series.cur)
+        head.append(f"{cur:>5} {unit}  ", style=color)
+        if series.min is not None and series.max is not None:
+            head.append(
+                f"min {fmt.format(series.min)}  max {fmt.format(series.max)}",
+                style="dim",
+            )
+        head.append(f"  · {win}", style="dim")
+        body.add_row(head)
+        for line in gauges.plot(
+            series.points, config.IGPU_HISTORY_HEIGHT, color=color
+        ):
+            row = Text("     ")
+            row.append_text(line)
+            body.add_row(row)
+
+
 def render_igpu(g: IgpuSample, procs: list[GpuProcess] | None = None) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
@@ -168,6 +197,8 @@ def render_igpu(g: IgpuSample, procs: list[GpuProcess] | None = None) -> Panel:
     if g.power_w is not None:
         stats.append(f"{g.power_w:.1f} W", style="magenta")
     body.add_row(stats)
+    body.add_row(Text())
+    _trend_rows(body, g)
     body.add_row(Text())
     body.add_row(_mem_row("vram", g.vram_used, g.vram_total))
     body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total))

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .history import Series
 
 
 @dataclass
@@ -61,6 +65,8 @@ class IgpuSample:
     power_w: float | None
     dram_read_mbps: int | None = None
     dram_write_mbps: int | None = None
+    sclk_history: "Series | None" = None
+    temp_history: "Series | None" = None
 
     @property
     def dram_total_mbps(self) -> int | None:

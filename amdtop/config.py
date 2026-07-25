@@ -90,6 +90,15 @@ DEFAULT_FOCUS = "igpu"
 # Max GPU-using processes listed in the iGPU panel (sorted by GPU % desc).
 GPU_PROC_TOP_N = 5
 
+# iGPU sclk/temp trend sparklines: sliding-window span (seconds) and the fixed
+# number of buckets (columns) the window is downsampled into for display.
+IGPU_HISTORY_WINDOW_S = 600.0
+IGPU_HISTORY_WIDTH = 60
+# Rows per sclk/temp trend plot. Two plots at this height add 2*(H+1) rows to
+# the iGPU panel; the focus layout assumes a terminal tall enough (>= ~28 rows,
+# true for a normal/tmux window) to show both without clipping.
+IGPU_HISTORY_HEIGHT = 4
+
 # Panel border glyphs. rich's default ROUNDED (╭╮╰╯) corners are absent from
 # some terminal fonts and get substituted by a stand-in like "_", which eats a
 # column and shifts every border. SQUARE (┌┐└┘) is universally available; set
