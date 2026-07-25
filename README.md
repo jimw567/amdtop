@@ -4,23 +4,7 @@ A [btop](https://github.com/aristocratos/btop)-style terminal monitor for **AMD 
 (Ryzen AI MAX series) that shows the **CPU, integrated GPU, and NPU side by side** in
 one live-refreshing view.
 
-```
-╭──────────────────────────────────────────────────────────────────────────────╮
-│  amdtop  my-host (Strix Halo)  up 08:08   socket 42.1 W    1.0s  q quit  +/- … │
-╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ CPU · AMD RYZEN AI MAX+ 395 w/ Radeon 8060S ─╮ ╭─ iGPU · Radeon 8060S · RDNA 3.5 · gfx1151 ─╮
-│ all [█▊              ]   7%                    │ │ busy[███████████████████████ ]  96%        │
-│ avg 3174 MHz  76°C  42.1 W  load 2.9 2.1 1.7  │ │ sclk 2496/2900 MHz  fclk 1619  uclk 1000   │
-│  0[      ] 0%   8[      ] 0%  16 …  24 …       │ │ 72°C   44.8 W                              │
-│  4[██████]100%  …                             │ │ vram[▉        ]  5% 4G/96G                 │
-╰───────────────────────────────────────────────╯ │ gtt [         ]  0% 24M/32G                │
-╭─ Memory ──────────────────────────────────────╮ ╰────────────────────────────────────────────╯
-│ ram [████▉           ]  17% 5G/31G            │ ╭─ NPU · XDNA ───────────────────────────────╮
-│ swap[███             ]  11% 702M/6G           │ │ busy[                    ]   0%             │
-│ avail 26G   cached 23G                        │ │ col0…col7  clk 800 MHz  D0                 │
-╰───────────────────────────────────────────────╯ │ RyzenAI-npu5  fw 1.0.0.166                 │
-                                                   ╰────────────────────────────────────────────╯
-```
+![amdtop iGPU view with 10-minute sclk/temp trend plots](docs/amdtop-igpu.png)
 
 ## Why
 
@@ -32,8 +16,9 @@ workload is bottlenecked. `amdtop` puts CPU, iGPU, NPU, and system memory on a s
 ## Features
 
 - **CPU** — per-thread utilization bars, per-core clocks, package power, Tctl temperature, load average.
-- **iGPU** — busy %, unified VRAM/GTT usage, sclk/fclk/uclk, edge temperature, GPU power. PCI-ID
-  decode surfaces the codename (**Strix Halo**) and architecture (**RDNA 3.5 · gfx1151**).
+- **iGPU** — busy %, unified VRAM/GTT usage, sclk/fclk/uclk, edge temperature, GPU power, plus
+  **10-minute sclk & temperature trend plots**. PCI-ID decode surfaces the codename
+  (**Strix Halo**) and architecture (**RDNA 3.5 · gfx1151**).
 - **NPU (XDNA)** — per-column activity, IPU power and clock, power state, firmware version — all
   **without root**, read from the amdgpu `gpu_metrics` table.
 - **Memory** — RAM and swap usage, available, cached.
