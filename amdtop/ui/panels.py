@@ -257,6 +257,8 @@ def render_igpu_compact(g: IgpuSample) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
     body.add_row(gauges.labeled_meter("busy", g.busy_pct, 10))
+    body.add_row(_mem_row("vram", g.vram_used, g.vram_total, width=10))
+    body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total, width=10))
     stats = Text()
     if g.sclk_mhz is not None:
         stats.append(f"{g.sclk_mhz} MHz  ", style="cyan")
@@ -265,8 +267,6 @@ def render_igpu_compact(g: IgpuSample) -> Panel:
     if g.power_w is not None:
         stats.append(f"{g.power_w:.1f} W", style="magenta")
     body.add_row(stats)
-    body.add_row(_mem_row("vram", g.vram_used, g.vram_total, width=10))
-    body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total, width=10))
     name = g.marketing or "iGPU"
     return Panel(body, box=config.PANEL_BOX, title=f"iGPU · {name}", title_align="left", border_style="magenta")
 
