@@ -149,25 +149,33 @@ def _trend_rows(body: Table, g: IgpuSample) -> None:
     window_m = config.IGPU_HISTORY_WINDOW_S / 60.0
     win = f"{window_m:.0f}m" if window_m == int(window_m) else f"{window_m:.1f}m"
     specs = [
-        ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}", config.IGPU_SCLK_PLOT_RANGE),
-        ("temp", g.temp_history, "°C", "yellow", "{:.0f}", config.IGPU_TEMP_PLOT_RANGE),
+        ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}"),
+        ("temp", g.temp_history, "°C", "yellow", "{:.0f}"),
+        ("power", g.power_history, "W", "magenta", "{:.0f}"),
     ]
-    # Shared gutter width so both plots' bars start at the same column.
+    # Each plot's vertical scale is the session extremes (sticky min..max learned
+    # since process start), so bars fill the plot as the run's true range emerges.
+    # Shared gutter width so every plot's bars start at the same column.
     gutter_w = max(
-        len(fmt.format(v))
-        for *_, fmt, (lo, hi) in specs
-        for v in (lo, hi)
+        (
+            len(fmt.format(v))
+            for _, series, _, _, fmt in specs
+            if series is not None and series.min is not None
+            for v in (series.min, series.max)
+        ),
+        default=1,
     )
-    for label, series, unit, color, fmt, (lo, hi) in specs:
+    for label, series, unit, color, fmt in specs:
         if series is None:
             continue
+        lo, hi = series.min, series.max
         head = Text()
         head.append(f"{label:<5}", style="bold")
         cur = "n/a" if series.cur is None else fmt.format(series.cur)
         head.append(f"{cur:>5} {unit}  ", style=color)
-        if series.min is not None and series.max is not None:
+        if lo is not None and hi is not None:
             head.append(
-                f"min {fmt.format(series.min)}  max {fmt.format(series.max)}",
+                f"min {fmt.format(lo)}  max {fmt.format(hi)}",
                 style="dim",
             )
         head.append(f"  · {win}", style="dim")
@@ -179,11 +187,11 @@ def _trend_rows(body: Table, g: IgpuSample) -> None:
             hi=hi,
             color=color,
         )
-        # y-axis gutter: hi label on the top row, lo on the bottom, blank between.
+        # y-axis gutter: max label on the top row, min on the bottom, blank between.
         for i, line in enumerate(lines):
-            if i == 0:
+            if i == 0 and hi is not None:
                 tick = fmt.format(hi)
-            elif i == len(lines) - 1:
+            elif i == len(lines) - 1 and lo is not None:
                 tick = fmt.format(lo)
             else:
                 tick = ""

@@ -67,6 +67,7 @@ class IgpuSample:
     dram_write_mbps: int | None = None
     sclk_history: "Series | None" = None
     temp_history: "Series | None" = None
+    power_history: "Series | None" = None
 
     @property
     def dram_total_mbps(self) -> int | None:

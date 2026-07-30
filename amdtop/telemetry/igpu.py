@@ -17,6 +17,7 @@ class IgpuSource:
         self._cu_count = cu_count(self._info.gfx)
         self._sclk_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
         self._temp_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
+        self._power_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
 
     def read(self, gm: GpuMetrics | None) -> IgpuSample:
         busy: float | None = None
@@ -35,6 +36,7 @@ class IgpuSource:
 
         self._sclk_hist.record(sclk)
         self._temp_hist.record(temp)
+        self._power_hist.record(power)
         width = config.IGPU_HISTORY_WIDTH
 
         return IgpuSample(
@@ -59,4 +61,5 @@ class IgpuSource:
             dram_write_mbps=dram_w,
             sclk_history=self._sclk_hist.series(width),
             temp_history=self._temp_hist.series(width),
+            power_history=self._power_hist.series(width),
         )
