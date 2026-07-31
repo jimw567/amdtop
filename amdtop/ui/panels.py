@@ -157,13 +157,15 @@ def _plot_block(spec, *, win: str, label_w: int, gutter_w: int, height: int) -> 
     absv = spec[5] if len(spec) > 5 else None
     lo, hi = series.min, series.max
     head = Text()
-    head.append(f"{label:<{label_w}} ", style="bold")
     if absv is not None:
-        # Throttle counter: show absolute accumulator and the plotted per-sample
-        # delta (series.cur), since the plot itself tracks the delta.
+        # Throttle counter: label links to the user guide (OSC 8), and the value
+        # shows the absolute accumulator plus the plotted per-sample delta.
+        link = f"{config.USER_GUIDE_URL}#{label}"
+        head.append(f"{label:<{label_w}} ", style=f"bold link {link}")
         delta = "n/a" if series.cur is None else f"{series.cur:+.0f}"
         head.append(f"{absv:>10} ({delta})  ", style=color)
     else:
+        head.append(f"{label:<{label_w}} ", style="bold")
         cur = "n/a" if series.cur is None else fmt.format(series.cur)
         head.append(f"{cur:>5} {unit}  ", style=color)
     if lo is not None and hi is not None:
