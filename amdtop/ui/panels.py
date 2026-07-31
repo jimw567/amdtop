@@ -159,9 +159,11 @@ def _plot_block(spec, *, win: str, label_w: int, gutter_w: int, height: int) -> 
     head = Text()
     if absv is not None:
         # Throttle counter: label links to the user guide (OSC 8), and the value
-        # shows the absolute accumulator plus the plotted per-sample delta.
+        # shows the absolute accumulator plus the plotted per-sample delta. Link
+        # only the keyword itself so the underline doesn't extend into padding.
         link = f"{config.USER_GUIDE_URL}#{label}"
-        head.append(f"{label:<{label_w}} ", style=f"bold link {link}")
+        head.append(label, style=f"bold link {link}")
+        head.append(" " * (label_w - len(label) + 1))
         delta = "n/a" if series.cur is None else f"{series.cur:+.0f}"
         head.append(f"{absv:>10} ({delta})  ", style=color)
     else:
