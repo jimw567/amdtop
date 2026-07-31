@@ -5,7 +5,7 @@ from __future__ import annotations
 from .. import config
 from . import sysfs
 from .decode import cu_count, decode_igpu
-from .gpu_metrics import GpuMetrics
+from .gpu_metrics import THROTTLE_NAMES, GpuMetrics
 from .history import MetricHistory
 from .sample import IgpuSample
 
@@ -18,6 +18,12 @@ class IgpuSource:
         self._sclk_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
         self._temp_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
         self._power_hist = MetricHistory(config.IGPU_HISTORY_WINDOW_S)
+        # Previous throttle accumulators, for frame-to-frame delta detection.
+        self._throttle_prev: list[int] | None = None
+        # One delta-history per throttler, for per-counter trend plots.
+        self._throttle_hist = [
+            MetricHistory(config.IGPU_HISTORY_WINDOW_S) for _ in THROTTLE_NAMES
+        ]
 
     def read(self, gm: GpuMetrics | None) -> IgpuSample:
         busy: float | None = None
@@ -38,6 +44,18 @@ class IgpuSource:
         self._temp_hist.record(temp)
         self._power_hist.record(power)
         width = config.IGPU_HISTORY_WIDTH
+
+        throttle_history: list = [None] * len(THROTTLE_NAMES)
+        throttle_absolute: list = [None] * len(THROTTLE_NAMES)
+        if gm is not None and gm.throttle_residency:
+            cur = gm.throttle_residency
+            prev = self._throttle_prev
+            if prev is not None and len(prev) == len(cur):
+                for i, (c, p) in enumerate(zip(cur, prev)):
+                    self._throttle_hist[i].record(float(c - p))
+            self._throttle_prev = cur
+            throttle_history = [h.series(width) for h in self._throttle_hist]
+            throttle_absolute = list(cur)
 
         return IgpuSample(
             marketing=self._info.marketing,
@@ -62,4 +80,6 @@ class IgpuSource:
             sclk_history=self._sclk_hist.series(width),
             temp_history=self._temp_hist.series(width),
             power_history=self._power_hist.series(width),
+            throttle_history=throttle_history,
+            throttle_absolute=throttle_absolute,
         )

@@ -68,6 +68,11 @@ class IgpuSample:
     sclk_history: "Series | None" = None
     temp_history: "Series | None" = None
     power_history: "Series | None" = None
+    # Per-throttler delta-per-sample history (one Series or None per counter,
+    # indexed by gpu_metrics.THROTTLE_NAMES order).
+    throttle_history: list = field(default_factory=list)
+    # Current absolute residency accumulator per throttler, same indexing.
+    throttle_absolute: list = field(default_factory=list)
 
     @property
     def dram_total_mbps(self) -> int | None:

@@ -91,9 +91,11 @@ DEFAULT_FOCUS = "igpu"
 GPU_PROC_TOP_N = 5
 
 # iGPU sclk/temp trend sparklines: sliding-window span (seconds) and the fixed
-# number of buckets (columns) the window is downsampled into for display.
+# number of buckets (columns) the window is downsampled into for display. The
+# plots render in two side-by-side columns, so the width is kept narrow enough
+# for two (plus gutters) to fit the focus panel.
 IGPU_HISTORY_WINDOW_S = 600.0
-IGPU_HISTORY_WIDTH = 60
+IGPU_HISTORY_WIDTH = 40
 # Rows per sclk/temp/power trend plot. Three plots at this height add 3*(H+1)
 # rows to the iGPU panel; the focus layout assumes a terminal tall enough
 # (>= ~33 rows, true for a normal/tmux window) to show all without clipping.
@@ -102,6 +104,12 @@ IGPU_HISTORY_HEIGHT = 4
 # the sticky min and the top is the sticky max, both learned since process
 # start (not just the 10-min window). So the plot auto-fits the run's observed
 # range instead of being pinned to hard-coded lo/hi bounds.
+
+# Which throttle_residency counters to graph as delta-per-sample trend plots.
+# GPU-relevant on this APU: GFX-die thermal plus the package power family across
+# time windows -- fppt (fast/burst), sppt (slow), spl (sustained/STAPM).
+# Must be names from gpu_metrics.THROTTLE_NAMES.
+IGPU_THROTTLE_PLOTS = ("thm_gfx", "fppt", "sppt", "spl")
 
 # Panel border glyphs. rich's default ROUNDED (╭╮╰╯) corners are absent from
 # some terminal fonts and get substituted by a stand-in like "_", which eats a

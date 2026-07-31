@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import datetime as _dt
+import itertools
 
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from .. import config
+from ..telemetry import gpu_metrics
 from ..telemetry.sample import (
     CpuSample,
     Frame,
@@ -145,89 +147,131 @@ def _proc_rows(procs: list[GpuProcess], body: Table, width: int = 44) -> None:
         body.add_row(line)
 
 
+# Throttlers split by cause: thermal (thm_*) vs power/electrical (the rest).
+_THROTTLE_THERMAL = {"thm_core", "thm_gfx", "thm_soc"}
+
+
+def _plot_block(spec, *, win: str, label_w: int, gutter_w: int, height: int) -> list[Text]:
+    """Render one trend plot (header + gutter + bars) as a list of Text lines."""
+    label, series, unit, color, fmt = spec[:5]
+    absv = spec[5] if len(spec) > 5 else None
+    lo, hi = series.min, series.max
+    head = Text()
+    head.append(f"{label:<{label_w}} ", style="bold")
+    if absv is not None:
+        # Throttle counter: show absolute accumulator and the plotted per-sample
+        # delta (series.cur), since the plot itself tracks the delta.
+        delta = "n/a" if series.cur is None else f"{series.cur:+.0f}"
+        head.append(f"{absv:>10} ({delta})  ", style=color)
+    else:
+        cur = "n/a" if series.cur is None else fmt.format(series.cur)
+        head.append(f"{cur:>5} {unit}  ", style=color)
+    if lo is not None and hi is not None:
+        head.append(f"min {fmt.format(lo)}  max {fmt.format(hi)}", style="dim")
+    head.append(f"  · {win}", style="dim")
+    out = [head]
+    lines = gauges.plot(series.points, height, lo=lo, hi=hi, color=color)
+    # y-axis gutter: max label on the top row, min on the bottom, blank between.
+    for i, line in enumerate(lines):
+        if i == 0 and hi is not None:
+            tick = fmt.format(hi)
+        elif i == len(lines) - 1 and lo is not None:
+            tick = fmt.format(lo)
+        else:
+            tick = ""
+        row = Text(f"{tick:>{gutter_w}} ", style="dim")
+        row.append_text(line)
+        out.append(row)
+    return out
+
+
 def _trend_rows(body: Table, g: IgpuSample) -> None:
     window_m = config.IGPU_HISTORY_WINDOW_S / 60.0
     win = f"{window_m:.0f}m" if window_m == int(window_m) else f"{window_m:.1f}m"
-    specs = [
+
+    thr = {}
+    if g.throttle_history:
+        idx = {n: i for i, n in enumerate(gpu_metrics.THROTTLE_NAMES)}
+        for name in config.IGPU_THROTTLE_PLOTS:
+            i = idx.get(name)
+            if i is not None and i < len(g.throttle_history):
+                color = "red" if name in _THROTTLE_THERMAL else "magenta"
+                absv = None
+                if i < len(g.throttle_absolute):
+                    absv = g.throttle_absolute[i]
+                thr[name] = (name, g.throttle_history[i], "d", color, "{:.0f}", absv)
+
+    # Two columns. Left: the analog trends (clock, thermal) plus GFX-die thermal
+    # throttle. Right: the package-power family stacked by time window --
+    # power draw over fast/slow/sustained (fppt/sppt/spl) throttle deltas.
+    col1 = [
         ("sclk", g.sclk_history, "MHz", "cyan", "{:.0f}"),
         ("temp", g.temp_history, "°C", "yellow", "{:.0f}"),
-        ("power", g.power_history, "W", "magenta", "{:.0f}"),
+        thr.get("thm_gfx"),
     ]
-    # Each plot's vertical scale is the session extremes (sticky min..max learned
-    # since process start), so bars fill the plot as the run's true range emerges.
-    # Shared gutter width so every plot's bars start at the same column.
+    col2 = [
+        ("power", g.power_history, "W", "magenta", "{:.0f}"),
+        thr.get("fppt"),
+        thr.get("sppt"),
+        thr.get("spl"),
+    ]
+
+    all_specs = [s for s in col1 + col2 if s is not None]
+    if not all_specs:
+        return
+    label_w = max(len(s[0]) for s in all_specs)
+    # Shared vertical scale is each plot's session extremes (sticky min..max).
+    # Gutter width is shared so every plot's bars start at the same column.
     gutter_w = max(
         (
-            len(fmt.format(v))
-            for _, series, _, _, fmt in specs
-            if series is not None and series.min is not None
-            for v in (series.min, series.max)
+            len(s[4].format(v))
+            for s in all_specs
+            if s[1] is not None and s[1].min is not None
+            for v in (s[1].min, s[1].max)
         ),
         default=1,
     )
-    for label, series, unit, color, fmt in specs:
-        if series is None:
-            continue
-        lo, hi = series.min, series.max
-        head = Text()
-        head.append(f"{label:<5}", style="bold")
-        cur = "n/a" if series.cur is None else fmt.format(series.cur)
-        head.append(f"{cur:>5} {unit}  ", style=color)
-        if lo is not None and hi is not None:
-            head.append(
-                f"min {fmt.format(lo)}  max {fmt.format(hi)}",
-                style="dim",
-            )
-        head.append(f"  · {win}", style="dim")
-        body.add_row(head)
-        lines = gauges.plot(
-            series.points,
-            config.IGPU_HISTORY_HEIGHT,
-            lo=lo,
-            hi=hi,
-            color=color,
-        )
-        # y-axis gutter: max label on the top row, min on the bottom, blank between.
-        for i, line in enumerate(lines):
-            if i == 0 and hi is not None:
-                tick = fmt.format(hi)
-            elif i == len(lines) - 1 and lo is not None:
-                tick = fmt.format(lo)
-            else:
-                tick = ""
-            row = Text(f"{tick:>{gutter_w}} ", style="dim")
-            row.append_text(line)
-            body.add_row(row)
+    height = config.IGPU_HISTORY_HEIGHT
+
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column()
+    grid.add_column()
+    for a, b in itertools.zip_longest(col1, col2):
+        left = _plot_block(a, win=win, label_w=label_w, gutter_w=gutter_w,
+                           height=height) if a and a[1] is not None else [Text()]
+        right = _plot_block(b, win=win, label_w=label_w, gutter_w=gutter_w,
+                            height=height) if b and b[1] is not None else [Text()]
+        n = max(len(left), len(right))
+        left += [Text()] * (n - len(left))
+        right += [Text()] * (n - len(right))
+        for l, r in zip(left, right):
+            grid.add_row(l, r)
+    body.add_row(grid)
 
 
 def render_igpu(g: IgpuSample, procs: list[GpuProcess] | None = None) -> Panel:
     body = Table.grid(expand=True)
     body.add_column()
-    body.add_row(gauges.labeled_meter("gpu", g.busy_pct, 24))
+
+    # Meters in two columns: activity (gpu/mem) left, memory (vram/gtt) right,
+    # so the four bars take two rows instead of four.
+    meters = Table.grid(padding=(0, 3))
+    meters.add_column()
+    meters.add_column()
+    left = [gauges.labeled_meter("gpu", g.busy_pct, 16)]
     if g.mem_busy_pct is not None:
-        body.add_row(gauges.labeled_meter("mem", g.mem_busy_pct, 24))
-
-    clk = Text()
-    if g.sclk_mhz is not None:
-        mx = f"/{g.sclk_max_mhz}" if g.sclk_max_mhz else ""
-        clk.append(f"sclk {g.sclk_mhz}{mx} MHz   ", style="cyan")
-    if g.fclk_mhz is not None:
-        clk.append(f"fclk {g.fclk_mhz}   ", style="cyan")
-    if g.uclk_mhz is not None:
-        clk.append(f"uclk {g.uclk_mhz}", style="cyan")
-    body.add_row(clk)
-
-    stats = Text()
-    if g.temp_c is not None:
-        stats.append(f"{g.temp_c:.0f}°C   ", style="yellow")
-    if g.power_w is not None:
-        stats.append(f"{g.power_w:.1f} W", style="magenta")
-    body.add_row(stats)
+        left.append(gauges.labeled_meter("mem", g.mem_busy_pct, 16))
+    right = [
+        _mem_row("vram", g.vram_used, g.vram_total, width=16),
+        _mem_row("gtt", g.gtt_used, g.gtt_total, width=16),
+    ]
+    for i in range(max(len(left), len(right))):
+        l = left[i] if i < len(left) else Text()
+        r = right[i] if i < len(right) else Text()
+        meters.add_row(l, r)
+    body.add_row(meters)
     body.add_row(Text())
     _trend_rows(body, g)
-    body.add_row(Text())
-    body.add_row(_mem_row("vram", g.vram_used, g.vram_total))
-    body.add_row(_mem_row("gtt", g.gtt_used, g.gtt_total))
     if procs:
         _proc_rows(procs, body)
 

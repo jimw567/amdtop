@@ -21,6 +21,9 @@ from .. import config
 _U16_INVALID = 0xFFFF
 _U32_INVALID = 0xFFFFFFFF
 
+# Names of the seven throttle_residency accumulators, in blob order.
+THROTTLE_NAMES = ["prochot", "spl", "fppt", "sppt", "thm_core", "thm_gfx", "thm_soc"]
+
 # gpu_metrics_v3_0, little-endian, natural C alignment (pad bytes marked 'x').
 _FMT = (
     "<"
@@ -90,6 +93,11 @@ class GpuMetrics:
     core_maxfreq: int | None
     gfx_maxfreq: int | None
 
+    # Monotonic per-throttler residency accumulators (prochot, spl, fppt, sppt,
+    # thm_core, thm_gfx, thm_soc). Absolute values are meaningless; a positive
+    # frame-to-frame delta means that throttler was engaged during the interval.
+    throttle_residency: list[int] = field(default_factory=list)
+
     raw: bytes = field(default=b"", repr=False)
 
 
@@ -157,6 +165,8 @@ def parse(blob: bytes) -> GpuMetrics:
     core_maxfreq = _clean16(nxt())
     gfx_maxfreq = _clean16(nxt())
 
+    throttle_residency = [nxt() for _ in range(len(THROTTLE_NAMES))]
+
     # ipu_activity is a valid 0 at idle; only strip the invalid sentinel.
     ipu_activity = [a for a in ipu_activity if a != _U16_INVALID]
     core_activity = [a for a in core_activity if a != _U16_INVALID]
@@ -188,6 +198,7 @@ def parse(blob: bytes) -> GpuMetrics:
         coreclk=coreclk,
         core_maxfreq=core_maxfreq,
         gfx_maxfreq=gfx_maxfreq,
+        throttle_residency=throttle_residency,
         raw=blob,
     )
 
